@@ -2,18 +2,14 @@
 {% block content %}
 <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
   <div>
-    <h1 class="h4 mb-1">
-      {{ profile.username }}
-    </h1>
+    <h1 class="h4 mb-1">Ciao, {{ profile.username }}</h1>
     <div class="text-muted small">Iscritto dal: {{ profile.joined_at }}</div>
   </div>
-  {% if request.url.path == '/profile' %}
   <div class="d-flex align-items-center gap-2">
     <a class="btn btn-outline-secondary" href="/friends">Amici</a>
     <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#addManualModal">+ Aggiungi (senza foto)</button>
     <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#uploadModal">+ Aggiungi birra</button>
   </div>
-  {% endif %}
 </div>
 
 <div class="row g-3 mb-3">
@@ -35,19 +31,34 @@
   </div>
 </div>
 
-{% if request.url.path == '/profile' %}
 <!-- Upload Modal -->
 <div class="modal fade" id="uploadModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
       <form id="uploadForm" action="/upload_beer" method="post" enctype="multipart/form-data" class="needs-validation" novalidate>
-        <div class="modal-header"><h5 class="modal-title">Carica foto birra</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-        <div class="modal-body">
-          <div class="mb-3"><label class="form-label">Nome birra (opzionale)</label><input name="beer_name" class="form-control" /></div>
-          <div class="mb-3"><label class="form-label">Foto</label><input id="photoInput" type="file" name="photo" accept="image/*" class="form-control" required /></div>
-          <div class="ratio ratio-16x9 border rounded d-none" id="previewWrap"><img id="previewImg" alt="Anteprima" class="object-fit-contain p-2" /></div>
+        <div class="modal-header">
+          <h5 class="modal-title">Carica foto birra</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
-        <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button><button class="btn btn-primary" type="submit">Carica</button></div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Nome birra (opzionale)</label>
+            <input name="beer_name" class="form-control" />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Foto</label>
+            <input id="photoInput" type="file" name="photo" accept="image/*" class="form-control" required />
+          </div>
+
+          <!-- Anteprima -->
+          <div class="ratio ratio-16x9 border rounded d-none" id="previewWrap">
+            <img id="previewImg" alt="Anteprima" class="object-fit-contain p-2" />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+          <button class="btn btn-primary" type="submit">Carica</button>
+        </div>
       </form>
     </div>
   </div>
@@ -58,57 +69,59 @@
   <div class="modal-dialog">
     <div class="modal-content">
       <form action="/add_manual_beers" method="post" class="needs-validation" novalidate>
-        <div class="modal-header"><h5 class="modal-title">Aggiungi senza foto</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-        <div class="modal-body">
-          <div class="mb-3"><label class="form-label">Quante?</label><input type="number" min="1" max="500" name="count" class="form-control" required /></div>
-          <div class="mb-3"><label class="form-label">Nome (opzionale)</label><input name="name" class="form-control" placeholder="Es. IPA, Lager…" /></div>
+        <div class="modal-header">
+          <h5 class="modal-title">Aggiungi senza foto</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
-        <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button><button class="btn btn-primary" type="submit">Aggiungi</button></div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Quante?</label>
+            <input type="number" min="1" name="count" class="form-control" required />
+          </div>
+          <div class="mb-1">
+            <label class="form-label">Nome (opzionale)</label>
+            <input name="name" class="form-control" placeholder="Es. IPA, Lager…" />
+          </div>
+          <div class="form-text">
+            L’inserimento manuale crea un’unica voce con il contatore (<em>quantity</em>).
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annulla</button>
+          <button class="btn btn-primary" type="submit">Aggiungi</button>
+        </div>
       </form>
     </div>
   </div>
 </div>
-{% endif %}
 
 <!-- Gallery -->
 {% if beers|length == 0 %}
-  <div class="text-center text-muted py-5">Nessuna birra da mostrare</div>
+  <div class="text-center text-muted py-5">Nessuna birra… ancora 🍻</div>
 {% else %}
   <div class="row g-3">
     {% for b in beers %}
       <div class="col-6 col-md-4 col-lg-3">
         <div class="card h-100 shadow-sm">
           {% if b.image_url %}
-            <img src="{{ b.image_url }}" class="card-img-top" alt="beer" />
+            <img
+              src="{{ b.image_url }}"
+              class="card-img-top gallery-img"
+              alt="{{ b.name or 'beer' }}"
+              data-fullsrc="{{ b.image_url }}"
+              loading="lazy"
+            />
           {% else %}
             <div class="d-flex align-items-center justify-content-center bg-light" style="height: 180px;">
-              <div class="text-muted">No photo (manual) ×{{ b.quantity or 1 }}</div>
+              <div class="text-muted small">
+                No photo (manual){% if b.quantity and b.quantity>1 %} · x{{ b.quantity }}{% endif %}
+              </div>
             </div>
           {% endif %}
           <div class="card-body p-2">
-            <div class="d-flex justify-content-between align-items-center">
-              <div>
-                <div class="fw-semibold small">
-                  {{ b.name or 'Birra' }}
-                  {% if b.quantity and b.quantity > 1 %}
-                    <span class="badge text-bg-secondary ms-1">x{{ b.quantity }}</span>
-                  {% endif %}
-                </div>
-                <div class="text-muted small">{{ b.timestamp }}</div>
-              </div>
-              <div class="d-flex gap-1">
-                {% if b.is_manual and b.quantity and b.quantity > 1 %}
-                <form action="/beers/{{ b.id }}/decrement" method="post">
-                  <button class="btn btn-sm btn-outline-secondary" title="−1">−1</button>
-                </form>
-                {% endif %}
-                <form action="/beers/{{ b.id }}/delete" method="post" onsubmit="return confirm('Eliminare questa voce?');">
-                  <button class="btn btn-sm btn-outline-danger" title="Elimina">🗑️</button>
-                </form>
-              </div>
-            </div>
+            <div class="fw-semibold small">{{ b.name or 'Birra' }}{% if b.quantity and b.quantity>1 %} · x{{ b.quantity }}{% endif %}</div>
+            <div class="text-muted small">{{ b.timestamp }}</div>
           </div>
-          
         </div>
       </div>
     {% endfor %}

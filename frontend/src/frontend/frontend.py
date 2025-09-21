@@ -7,7 +7,7 @@ from requests.exceptions import RequestException, HTTPError
 
 from fastapi import FastAPI, Request, Form, UploadFile, File
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 BASE_URL = getenv("BACKEND_API_URL", "http://localhost:8001")
@@ -184,12 +184,18 @@ async def profile(request: Request, message: str = ""):
     if isinstance(beers_data, RedirectResponse):
         return beers_data
 
+    items = beers_data.get("items", [])
+    for b in items:
+        if b.get("image_url", "").startswith("/media/"):
+            b["image_url"] = b["image_url"].replace("/media/", "/bmedia/", 1)
+
+
     return templates.TemplateResponse(
         "profile.html",
         {
             "request": request,
             "profile": profile_data,
-            "beers": beers_data.get("items", []),
+            "beers": items,
             "message": message,
         },
     )
@@ -392,13 +398,28 @@ async def user_profile(request: Request, username: str):
     if isinstance(beers_data, RedirectResponse):
         return beers_data
 
+    items = beers_data.get("items", [])
+    for b in items:
+        if b.get("image_url", "").startswith("/media/"):
+            b["image_url"] = b["image_url"].replace("/media/", "/bmedia/", 1)
+
     # Reuse the same template for consistent layout
     return templates.TemplateResponse(
         "profile.html",
         {
             "request": request,
             "profile": user_data,
-            "beers": beers_data.get("items", []),
+            "beers": items,
             "message": "",
         },
     )
+
+@app.get("/bmedia/{path:path}")
+def proxy_media(path: str):
+    # Prende i file media dal backend interno (backend-birbs:8001) e li espone su /bmedia
+    upstream = f"{BASE_URL}/media/{path}"
+    r = get(upstream, stream=True)
+    r.raise_for_status()
+    # Propaga il Content-Type se noto
+    content_type = r.headers.get("Content-Type", "application/octet-stream")
+    return StreamingResponse(r.raw, media_type=content_type)
