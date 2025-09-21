@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-12 col-md-6 col-lg-5">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h1 class="h4 mb-3">Registrati</h1>
+        <form action="/register" method="post" class="needs-validation" novalidate>
+          <div class="mb-3">
+            <label class="form-label">Username</label>
+            <input name="username" class="form-control" required />
+            <div class="invalid-feedback">Inserisci l'username.</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Password</label>
+            <input type="password" name="password" class="form-control" minlength="6" required />
+            <div class="invalid-feedback">Minimo 6 caratteri.</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Ripeti Password</label>
+            <input type="password" name="repeatpass" class="form-control" required />
+            <div class="invalid-feedback">Ripeti la password.</div>
+          </div>
+          <button class="btn btn-success w-100" type="submit">Crea account</button>
+        </form>
+        <p class="mt-3 small">Hai già un account? <a href="/directlogin">Accedi</a></p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

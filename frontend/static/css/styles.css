@@ -1,0 +1,2 @@
+/* Tiny customizations on top of Bootstrap */
+.card img { max-height: 220px; object-fit: cover; }

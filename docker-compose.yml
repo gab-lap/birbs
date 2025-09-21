@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  mariadb-birbs:
+    image: mariadb:11.7.2-ubi9
+    container_name: mariadb-birbs
+    environment:
+      - MARIADB_ROOT_PASSWORD=root
+      - MARIADB_DATABASE=beertrack
+    ports:
+      - "3307:3306"
+    volumes:
+      - ./mariadb_data/:/var/lib/mysql:Z
+      - ./mariadb_init/init.sql:/docker-entrypoint-initdb.d/init.sql:Z
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -uroot -p$$MARIADB_ROOT_PASSWORD || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    networks:
+      - birbs_network
+
+  backend-birbs:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: backend-birbs
+    environment:
+      - DB_HOST=mariadb-birbs
+      - DB_PORT=3306
+      - DB_USER=root
+      - DB_PASS=root
+      - DB_NAME=beertrack
+      - MEDIA_ROOT=/app/uploads
+      - MEDIA_URL_BASE=/media
+      - SESSION_TTL_DAYS=7
+      - SECURE_COOKIES=0
+    volumes:
+      - ./uploads:/app/uploads
+    depends_on:
+      mariadb-birbs:
+        condition: service_healthy
+    ports:
+      - "8001:8001"
+    restart: unless-stopped
+    networks:
+      - birbs_network
+
+  frontend-birbs:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: frontend-birbs
+    environment:
+      - BACKEND_API_URL=http://backend-birbs:8001
+      - SECURE_COOKIES=0
+    depends_on:
+      - backend-birbs
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    networks:
+      - birbs_network
+
+networks:
+  birbs_network:
+    driver: bridge

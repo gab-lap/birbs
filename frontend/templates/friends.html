@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="h4 mb-3">Amici</h1>
+
+<div class="row g-4">
+  <div class="col-12 col-lg-6">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h2 class="h6 mb-3">I tuoi amici</h2>
+        {% if friends|length == 0 %}
+          <div class="text-muted">Nessun amico ancora</div>
+        {% else %}
+          <ul class="list-group">
+            {% for fr in friends %}
+              <li class="list-group-item d-flex justify-content-between align-items-center">
+                <span>@{{ fr.username }}</span>
+                <a class="btn btn-sm btn-outline-primary" href="/u/{{ fr.username }}">Vedi profilo</a>
+              </li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-6">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h2 class="h6 mb-3">Richieste</h2>
+
+        <form action="/friends/request" method="post" class="d-flex gap-2 mb-3">
+          <input name="username" class="form-control" placeholder="Cerca username…" required />
+          <button class="btn btn-primary">Invia richiesta</button>
+        </form>
+
+        <h3 class="h6">In arrivo</h3>
+        {% if requests.incoming|length == 0 %}
+          <div class="text-muted mb-2">Nessuna</div>
+        {% else %}
+          {% for r in requests.incoming %}
+            <form action="/friends/respond" method="post" class="d-flex align-items-center justify-content-between border rounded p-2 mb-2">
+              <div><strong>{{ r.other_username }}</strong> ti ha inviato una richiesta</div>
+              <div class="d-flex gap-2">
+                <input type="hidden" name="request_id" value="{{ r.id }}" />
+                <button name="action" value="accept" class="btn btn-sm btn-success">Accetta</button>
+                <button name="action" value="decline" class="btn btn-sm btn-outline-secondary">Rifiuta</button>
+              </div>
+            </form>
+          {% endfor %}
+        {% endif %}
+
+        <h3 class="h6 mt-3">Inviate</h3>
+        {% if requests.outgoing|length == 0 %}
+          <div class="text-muted">Nessuna</div>
+        {% else %}
+          <ul class="list-group">
+            {% for r in requests.outgoing %}
+              <li class="list-group-item d-flex justify-content-between align-items-center">
+                <span>A: <strong>{{ r.other_username }}</strong> (in attesa)</span>
+              </li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
