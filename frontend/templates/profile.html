@@ -1,15 +1,27 @@
 {% extends "base.html" %}
 {% block content %}
+
 <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
   <div>
     <h1 class="h4 mb-1">Ciao, {{ profile.username }}</h1>
     <div class="text-muted small">Iscritto dal: {{ profile.joined_at }}</div>
   </div>
+
+  {% if is_owner %}
   <div class="d-flex align-items-center gap-2">
     <a class="btn btn-outline-secondary" href="/friends">Amici</a>
-    <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#addManualModal">+ Aggiungi (senza foto)</button>
-    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#uploadModal">+ Aggiungi birra</button>
+    <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#addManualModal">
+      + Aggiungi (senza foto)
+    </button>
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#uploadModal">
+      + Aggiungi birra
+    </button>
   </div>
+  {% else %}
+  <div class="d-flex align-items-center gap-2">
+    <a class="btn btn-outline-secondary" href="/friends">Amici</a>
+  </div>
+  {% endif %}
 </div>
 
 <div class="row g-3 mb-3">
@@ -31,6 +43,7 @@
   </div>
 </div>
 
+{% if is_owner %}
 <!-- Upload Modal -->
 <div class="modal fade" id="uploadModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
@@ -49,7 +62,6 @@
             <label class="form-label">Foto</label>
             <input id="photoInput" type="file" name="photo" accept="image/*" class="form-control" required />
           </div>
-
           <!-- Anteprima -->
           <div class="ratio ratio-16x9 border rounded d-none" id="previewWrap">
             <img id="previewImg" alt="Anteprima" class="object-fit-contain p-2" />
@@ -94,8 +106,9 @@
     </div>
   </div>
 </div>
+{% endif %}
 
-<!-- Gallery -->
+<!-- Galleria -->
 {% if beers|length == 0 %}
   <div class="text-center text-muted py-5">Nessuna birra… ancora 🍻</div>
 {% else %}
@@ -110,6 +123,7 @@
               alt="{{ b.name or 'beer' }}"
               data-fullsrc="{{ b.image_url }}"
               loading="lazy"
+              style="cursor: zoom-in;"
             />
           {% else %}
             <div class="d-flex align-items-center justify-content-center bg-light" style="height: 180px;">
@@ -118,13 +132,79 @@
               </div>
             </div>
           {% endif %}
+
           <div class="card-body p-2">
-            <div class="fw-semibold small">{{ b.name or 'Birra' }}{% if b.quantity and b.quantity>1 %} · x{{ b.quantity }}{% endif %}</div>
+            <div class="fw-semibold small">
+              {{ b.name or 'Birra' }}
+              {% if b.quantity and b.quantity>1 %}
+                <span class="badge text-bg-secondary ms-1">x{{ b.quantity }}</span>
+              {% endif %}
+            </div>
             <div class="text-muted small">{{ b.timestamp }}</div>
+
+            {% if is_owner %}
+            <div class="d-flex gap-2 mt-2">
+              <!-- Decrementa (riduce quantity a quantity-1, se arriva a 0 elimina la voce) -->
+              <form action="/beers/{{ b.id }}/decrement" method="post">
+                <button class="btn btn-sm btn-outline-warning" type="submit">-1</button>
+              </form>
+              <!-- Elimina voce -->
+              <form action="/beers/{{ b.id }}/delete" method="post" onsubmit="return confirm('Eliminare questa voce?');">
+                <button class="btn btn-sm btn-outline-danger" type="submit">🗑️ Elimina</button>
+              </form>
+            </div>
+            {% endif %}
           </div>
         </div>
       </div>
     {% endfor %}
   </div>
 {% endif %}
+
+<!-- Modal per ingrandire l'immagine -->
+<div class="modal fade" id="lightboxModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-xl">
+    <div class="modal-content bg-dark">
+      <div class="modal-body p-0">
+        <img id="lightboxImg" alt="beer" class="w-100 h-100 object-fit-contain" />
+      </div>
+      <div class="position-absolute top-0 end-0 p-2">
+        <button type="button" class="btn btn-sm btn-light" data-bs-dismiss="modal">Chiudi</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Script per anteprima upload e lightbox -->
+<script>
+  // Anteprima upload (se presente il campo)
+  (function () {
+    const input = document.getElementById('photoInput');
+    if (!input) return;
+    const wrap = document.getElementById('previewWrap');
+    const img  = document.getElementById('previewImg');
+    input.addEventListener('change', () => {
+      const f = input.files && input.files[0];
+      if (!f) { wrap.classList.add('d-none'); return; }
+      img.src = URL.createObjectURL(f);
+      wrap.classList.remove('d-none');
+    });
+  })();
+
+  // Lightbox sulla galleria
+  (function () {
+    const modalEl = document.getElementById('lightboxModal');
+    const modal = typeof bootstrap !== 'undefined' ? new bootstrap.Modal(modalEl) : null;
+    const fullImg = document.getElementById('lightboxImg');
+
+    document.querySelectorAll('.gallery-img').forEach(img => {
+      img.addEventListener('click', () => {
+        const src = img.getAttribute('data-fullsrc') || img.src;
+        fullImg.src = src;
+        modal && modal.show();
+      });
+    });
+  })();
+</script>
+
 {% endblock %}

@@ -186,8 +186,10 @@ async def profile(request: Request, message: str = ""):
 
     items = beers_data.get("items", [])
     for b in items:
-        if b.get("image_url", "").startswith("/media/"):
-            b["image_url"] = b["image_url"].replace("/media/", "/bmedia/", 1)
+        url = (b.get("image_url") or "")
+        if url.startswith("/media/"):
+            b["image_url"] = url.replace("/media/", "/bmedia/", 1)
+
 
 
     return templates.TemplateResponse(
@@ -197,6 +199,7 @@ async def profile(request: Request, message: str = ""):
             "profile": profile_data,
             "beers": items,
             "message": message,
+            "is_owner": True,
         },
     )
 
@@ -400,8 +403,10 @@ async def user_profile(request: Request, username: str):
 
     items = beers_data.get("items", [])
     for b in items:
-        if b.get("image_url", "").startswith("/media/"):
-            b["image_url"] = b["image_url"].replace("/media/", "/bmedia/", 1)
+        url = (b.get("image_url") or "")
+        if url.startswith("/media/"):
+            b["image_url"] = url.replace("/media/", "/bmedia/", 1)
+
 
     # Reuse the same template for consistent layout
     return templates.TemplateResponse(
@@ -411,6 +416,7 @@ async def user_profile(request: Request, username: str):
             "profile": user_data,
             "beers": items,
             "message": "",
+            "is_owner": False,
         },
     )
 
