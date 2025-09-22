@@ -1,0 +1,3 @@
+birbscounter.duckdns.org {
+    reverse_proxy frontend-birbs:8000
+}
