@@ -1,5 +1,4 @@
 # Don't send DB/data to the Docker build context
-caddy_config/
 mariadb_data/
 uploads/
 
