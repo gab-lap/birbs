@@ -1,0 +1,18 @@
+# Don't send DB/data to the Docker build context
+mariadb_data/
+uploads/
+
+# Usual junk to ignore for builds
+.git
+.gitignore
+__pycache__/
+*.pyc
+*.pyo
+*.log
+.env
+*.sqlite3
+node_modules/
+*.key
+*.pem
+*.pub
+.DS_Store
