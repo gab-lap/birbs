@@ -338,6 +338,20 @@ def upload_beer(
     db: Session = Depends(get_db),
     current: User = Depends(get_current_user),
 ):
+
+    # Validazioni lato server
+    if photo is None or not photo.filename:
+        raise HTTPException(status_code=400, detail="Foto obbligatoria.")
+    # opzionale: verifica tipo MIME
+    if photo.content_type not in {"image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"}:
+        raise HTTPException(status_code=400, detail="Il file deve essere un'immagine.")
+
+    # opzionale: verifica non vuoto
+    head = photo.file.read(1)
+    if not head:
+        raise HTTPException(status_code=400, detail="File immagine vuoto.")
+    photo.file.seek(0)
+
     # Save file
     safe_name = f"{current.id}_{int(datetime.utcnow().timestamp())}_{photo.filename}"
     dest_path = os.path.join(MEDIA_ROOT, safe_name)

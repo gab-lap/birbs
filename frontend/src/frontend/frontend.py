@@ -112,19 +112,21 @@ def home(request: Request):
 
 
 @app.get("/directlogin", response_class=HTMLResponse)
-def directlogin(request: Request, message: str = ""):
-    return templates.TemplateResponse("login.html", {"request": request, "message": message})
-
+def directlogin(request: Request, message: str = "", message_type: str = "success"):
+    return templates.TemplateResponse("login.html", {"request": request, "message": message, "message_type": message_type})
 
 @app.get("/directregister", response_class=HTMLResponse)
-def directregister(request: Request):
-    return templates.TemplateResponse("register.html", {"request": request})
+def directregister(request: Request, message: str = "", message_type: str = "success"):
+    return templates.TemplateResponse("register.html", {"request": request, "message": message, "message_type": message_type})
 
 
 @app.post("/login", response_class=HTMLResponse)
 async def login_post(request: Request, username: str = Form(...), password: str = Form(...)):
     if not username.strip() or not password.strip():
-        return templates.TemplateResponse("login.html", {"request": request, "message": "Username o password non validi."})
+        return templates.TemplateResponse(
+            "login.html",
+            {"request": request, "message": "Username o password non validi.", "message_type": "danger"},
+        )
 
     try:
         resp = post(f"{BASE_URL}/login", json={"username": username, "password": password})
@@ -136,37 +138,54 @@ async def login_post(request: Request, username: str = Form(...), password: str 
                 detail = e.response.json().get("detail", detail)
             except Exception:
                 detail = e.response.text or detail
-        return templates.TemplateResponse("login.html", {"request": request, "message": detail})
+        return templates.TemplateResponse("login.html", {"request": request, "message": detail, "message_type": "danger"})
     except RequestException as e:
-        return templates.TemplateResponse("login.html", {"request": request, "message": f"Backend non raggiungibile: {e}"})
+        return templates.TemplateResponse("login.html", {"request": request, "message": f"Backend non raggiungibile: {e}", "message_type": "danger"})
 
     redirect = RedirectResponse(url="/profile", status_code=302)
     _copy_backend_cookies_to(redirect, resp)
     return redirect
 
 
+
 @app.post("/register", response_class=HTMLResponse)
 async def register_post(request: Request, username: str = Form(...), password: str = Form(...), repeatpass: str = Form(...)):
     if password != repeatpass:
-        return templates.TemplateResponse("register.html", {"request": request, "message": "Le password non coincidono."})
+        return templates.TemplateResponse(
+            "register.html",
+            {"request": request, "message": "Le password non coincidono.", "message_type": "danger"},
+        )
     if not username.strip() or not password.strip():
-        return templates.TemplateResponse("register.html", {"request": request, "message": "Dati non validi."})
+        return templates.TemplateResponse(
+            "register.html",
+            {"request": request, "message": "Dati non validi.", "message_type": "danger"},
+        )
 
-    return await make_backend_request(
-        request,
-        method="post",
-        endpoint="/register",
-        data={"username": username, "password": password},
-        success_template="login.html",
-        error_template="register.html",
-    )
+    # Chiama il backend manualmente (così puoi gestire i colori)
+    try:
+        resp = post(f"{BASE_URL}/register", json={"username": username, "password": password})
+        resp.raise_for_status()
+    except HTTPError as e:
+        detail = "Registrazione fallita."
+        if e.response is not None:
+            try:
+                detail = e.response.json().get("detail", detail)
+            except Exception:
+                detail = e.response.text or detail
+        return templates.TemplateResponse("register.html", {"request": request, "message": detail, "message_type": "danger"})
+    except RequestException as e:
+        return templates.TemplateResponse("register.html", {"request": request, "message": f"Backend non raggiungibile: {e}", "message_type": "danger"})
+
+    # Successo: torna alla pagina di login con messaggio verde
+    return templates.TemplateResponse("login.html", {"request": request, "message": "Registrazione completata!", "message_type": "success"})
+
 
 
 @app.get("/profile", response_class=HTMLResponse)
-async def profile(request: Request, message: str = ""):
+async def profile(request: Request, message: str = "", message_type: str = "success"):
     headers = _build_auth_headers(request)
     if not headers:
-        return RedirectResponse(url="/directlogin", status_code=302)
+        return RedirectResponse(url="/directlogin?message=Sessione%20scaduta&message_type=danger", status_code=302)
 
     profile_data = await make_backend_request(
         request, "get", "/profile",
@@ -190,8 +209,6 @@ async def profile(request: Request, message: str = ""):
         if url.startswith("/media/"):
             b["image_url"] = url.replace("/media/", "/bmedia/", 1)
 
-
-
     return templates.TemplateResponse(
         "profile.html",
         {
@@ -199,16 +216,18 @@ async def profile(request: Request, message: str = ""):
             "profile": profile_data,
             "beers": items,
             "message": message,
+            "message_type": message_type,  # <-- QUI ora esiste
             "is_owner": True,
         },
     )
+
 
 
 @app.post("/upload_beer", response_class=HTMLResponse)
 async def upload_beer(request: Request, beer_name: str = Form(""), photo: UploadFile = File(...)):
     headers = _build_auth_headers(request)
     if not headers:
-        return RedirectResponse(url="/directlogin", status_code=302)
+        return RedirectResponse(url="/directlogin?message=Sessione%20scaduta&message_type=danger", status_code=302)
 
     try:
         with photo.file as fp:
@@ -223,27 +242,77 @@ async def upload_beer(request: Request, beer_name: str = Form(""), photo: Upload
                 detail = e.response.json().get("detail", detail)
             except Exception:
                 detail = e.response.text or detail
-        return await profile(request, message=detail)
+        # ritorna errore con message_type rosso
+        return await profile(request, message=detail, message_type="danger")
     except RequestException as e:
-        return await profile(request, message=f"Backend non raggiungibile: {e}")
+        return await profile(request, message=f"Backend non raggiungibile: {e}", message_type="danger")
 
-    return RedirectResponse(url="/profile?message=Upload%20ok", status_code=302)
+    # successo: verde
+    return RedirectResponse(url="/profile?message=Upload%20ok&message_type=success", status_code=302)
+
+
 
 
 @app.post("/add_manual_beers", response_class=HTMLResponse)
-async def add_manual_beers(request: Request, count: int = Form(...), name: str = Form("")):
+async def add_manual_beers(request: Request, count: str = Form(""), name: str = Form("")):
     headers = _build_auth_headers(request)
     if not headers:
         return RedirectResponse(url="/directlogin", status_code=302)
 
-    try:
-        payload = {"count": int(count), "name": name}
-        resp = post(f"{BASE_URL}/beers/add_count", json=payload, headers=headers)
-        resp.raise_for_status()
-    except RequestException as e:
-        return await profile(request, message=f"Errore: {e}")
+    # Manual validation
+    raw = (count or "").strip()
+    if not raw.isdigit():
+        return RedirectResponse(
+            url="/profile?message=" + quote("Inserisci un numero intero") + "&message_type=danger",
+            status_code=302
+        )
 
-    return RedirectResponse(url="/profile?message=Aggiunte", status_code=302)
+    n = int(raw)
+    if n < 1:
+        return RedirectResponse(
+            url="/profile?message=" + quote("Il numero di birre deve essere almeno 1") + "&message_type=danger",
+            status_code=302
+        )
+    if n > 500:  # allinea al conint(…le=500) del backend
+        return RedirectResponse(
+            url="/profile?message=" + quote("Puoi inserire al massimo 500 birre per volta") + "&message_type=danger",
+            status_code=302
+        )
+
+    try:
+        resp = post(f"{BASE_URL}/beers/add_count", json={"count": n, "name": name}, headers=headers)
+        resp.raise_for_status()
+    except HTTPError as e:
+        msg = "Errore nell'aggiunta."
+        try:
+            er = e.response.json()
+            # FastAPI 422 shape: {"detail": [ { "msg": "...", ...}, ... ]}
+            if isinstance(er, dict) and "detail" in er:
+                det = er["detail"]
+                if isinstance(det, list) and det and isinstance(det[0], dict) and "msg" in det[0]:
+                    msg = det[0]["msg"]
+                elif isinstance(det, str):
+                    msg = det
+            elif isinstance(er, str):
+                msg = er
+        except Exception:
+            # fall back to plain text body if any
+            msg = e.response.text or msg
+        # ensure string for quote()
+        msg = str(msg)
+        return RedirectResponse(
+            url="/profile?message=" + quote(msg) + "&message_type=danger",
+            status_code=302
+        )
+    except RequestException as e:
+        return RedirectResponse(
+            url="/profile?message=" + quote(f"Backend non raggiungibile: {e}") + "&message_type=danger",
+            status_code=302
+        )
+
+    return RedirectResponse(url="/profile?message=Aggiunte&message_type=success", status_code=302)
+
+
 
 
 @app.post("/logout", response_class=HTMLResponse)
@@ -253,7 +322,7 @@ async def logout_post(request: Request):
         post(f"{BASE_URL}/logout", headers=headers)
     except RequestException:
         pass
-    resp = RedirectResponse(url="/directlogin", status_code=302)
+    resp = RedirectResponse(url="/directlogin?message=Sessione%20scaduta&message_type=danger", status_code=302)
     resp.delete_cookie("session_token")
     return resp
 
@@ -263,7 +332,7 @@ async def logout_post(request: Request):
 async def friends_page(request: Request, message: str = "", message_type: str = ""):
     headers = _build_auth_headers(request)
     if not headers:
-        return RedirectResponse(url="/directlogin", status_code=302)
+        return RedirectResponse(url="/directlogin?message=Sessione%20scaduta&message_type=danger", status_code=302)
 
     requests_data = await make_backend_request(
         request, "get", "/friends/requests",
@@ -296,11 +365,11 @@ async def friends_page(request: Request, message: str = "", message_type: str = 
 async def delete_beer_front(request: Request, beer_id: int):
     headers = _build_auth_headers(request)
     if not headers:
-        return RedirectResponse(url="/directlogin", status_code=302)
+        return RedirectResponse(url="/directlogin?message=Sessione%20scaduta&message_type=danger", status_code=302)
     try:
         resp = post(f"{BASE_URL}/beers/{beer_id}/delete", headers=headers)
         resp.raise_for_status()
-        return RedirectResponse("/profile?message=" + quote("Voce eliminata"), status_code=302)
+        return RedirectResponse("/profile?message=" + quote("Voce eliminata") + "&message_type=success", status_code=302)
     except HTTPError as e:
         msg = "Impossibile eliminare."
         if e.response is not None:
@@ -317,11 +386,11 @@ async def delete_beer_front(request: Request, beer_id: int):
 async def decrement_beer_front(request: Request, beer_id: int):
     headers = _build_auth_headers(request)
     if not headers:
-        return RedirectResponse(url="/directlogin", status_code=302)
+        return RedirectResponse(url="/directlogin?message=Sessione%20scaduta&message_type=danger", status_code=302)
     try:
         resp = post(f"{BASE_URL}/beers/{beer_id}/decrement", headers=headers)
         resp.raise_for_status()
-        return RedirectResponse("/profile?message=" + quote("Aggiornato"), status_code=302)
+        return RedirectResponse("/profile?message=" + quote("Aggiornato") + "&message_type=success", status_code=302)
     except HTTPError as e:
         msg = "Impossibile aggiornare."
         if e.response is not None:
@@ -337,16 +406,17 @@ async def decrement_beer_front(request: Request, beer_id: int):
 async def friends_request(request: Request, username: str = Form(...)):
     headers = _build_auth_headers(request)
     if not headers:
-        return RedirectResponse(url="/directlogin", status_code=302)
+        return RedirectResponse(url="/directlogin?message=Sessione%20scaduta&message_type=danger", status_code=302)
 
     try:
         resp = post(f"{BASE_URL}/friends/request", json={"to_username": username}, headers=headers)
         resp.raise_for_status()
         # OK
         return RedirectResponse(
-            url="/friends?message=" + quote("Richiesta inviata"),
+            url="/friends?message=" + quote("Richiesta inviata") + "&message_type=success",
             status_code=302
-        )
+        )       
+
     except HTTPError as e:
         msg = "Errore nell'invio della richiesta."
         if e.response is not None:
@@ -369,21 +439,51 @@ async def friends_request(request: Request, username: str = Form(...)):
 async def friends_respond(request: Request, request_id: int = Form(...), action: str = Form(...)):
     headers = _build_auth_headers(request)
     if not headers:
-        return RedirectResponse(url="/directlogin", status_code=302)
+        return RedirectResponse(url="/directlogin?message=Sessione%20scaduta&message_type=danger", status_code=302)
+
     try:
-        resp = post(f"{BASE_URL}/friends/respond", json={"request_id": request_id, "action": action}, headers=headers)
+        resp = post(
+            f"{BASE_URL}/friends/respond",
+            json={"request_id": request_id, "action": action},
+            headers=headers
+        )
         resp.raise_for_status()
-    except RequestException:
-        pass
-    return RedirectResponse(url="/friends", status_code=302)
+        # messaggio di successo
+        if action == "accept":
+            msg = "Richiesta accettata"
+        elif action == "decline":
+            msg = "Richiesta rifiutata"
+        else:
+            msg = "Azione completata"
+        return RedirectResponse(
+            url="/friends?message=" + quote(msg) + "&message_type=success",
+            status_code=302
+        )
+    except HTTPError as e:
+        msg = "Errore nella risposta alla richiesta."
+        if e.response is not None:
+            try:
+                msg = e.response.json().get("detail", msg)
+            except Exception:
+                msg = e.response.text or msg
+        return RedirectResponse(
+            url="/friends?message=" + quote(msg) + "&message_type=danger",
+            status_code=302
+        )
+    except RequestException as e:
+        return RedirectResponse(
+            url="/friends?message=" + quote(f"Backend non raggiungibile: {e}") + "&message_type=danger",
+            status_code=302
+        )
+
 
 
 # ---------- Public user profile ----------
 @app.get("/u/{username}", response_class=HTMLResponse)
-async def user_profile(request: Request, username: str):
+async def user_profile(request: Request, username: str, message: str = "", message_type: str = "success"):
     headers = _build_auth_headers(request)
     if not headers:
-        return RedirectResponse(url="/directlogin", status_code=302)
+        return RedirectResponse(url="/directlogin?message=Sessione%20scaduta&message_type=danger", status_code=302)
 
     user_data = await make_backend_request(
         request, "get", f"/users/{quote(username)}",
@@ -407,18 +507,18 @@ async def user_profile(request: Request, username: str):
         if url.startswith("/media/"):
             b["image_url"] = url.replace("/media/", "/bmedia/", 1)
 
-
-    # Reuse the same template for consistent layout
     return templates.TemplateResponse(
         "profile.html",
         {
             "request": request,
             "profile": user_data,
             "beers": items,
-            "message": "",
+            "message": message,
+            "message_type": message_type,
             "is_owner": False,
         },
     )
+
 
 @app.get("/bmedia/{path:path}")
 def proxy_media(path: str):
