@@ -36,7 +36,7 @@ services:
       - MEDIA_ROOT=/app/uploads
       - MEDIA_URL_BASE=/media
       - SESSION_TTL_DAYS=7
-      - SECURE_COOKIES=1
+      - SECURE_COOKIES=0
     volumes:
       - ./uploads:/app/uploads
     depends_on:
