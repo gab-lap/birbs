@@ -255,6 +255,15 @@ def login(data: LoginPayload, db: Session = Depends(get_db)):
     u = db.query(User).filter(User.username == data.username.strip()).first()
     if not u or not verify_password(data.password, u.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    # --- Auto-prune expired sessions for everyone (keeps table tidy)
+    db.query(SessionToken).filter(SessionToken.expires_at < datetime.utcnow()).delete(synchronize_session=False)
+    db.commit()
+
+    # --- OPTIONAL: uncomment to enforce single active session per user
+    # db.query(SessionToken).filter(SessionToken.user_id == u.id).delete(synchronize_session=False)
+    # db.commit()
+
     token = secrets.token_hex(32)
     s = SessionToken(
         token=token,
@@ -264,9 +273,11 @@ def login(data: LoginPayload, db: Session = Depends(get_db)):
     )
     db.add(s)
     db.commit()
+
     resp = JSONResponse({"ok": True})
     set_session_cookie(resp, token)
     return resp
+
 
 
 @app.post("/logout")
