@@ -1,20 +1,29 @@
-version: "3.8"
+version: '3.8'
 
 services:
   caddy:
-    image: caddy:2
+    image: caddy:2.7
     container_name: caddy
-    restart: unless-stopped
+    depends_on:
+      - frontend-birbs
+      - backend-birbs
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
-      - ./caddy_data:/data
-      - ./caddy_config:/config
+      # Caddy config file from your project root
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Named volumes (Docker manages these; no host folder)
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
     networks:
       - birbs_network
 
 networks:
   birbs_network:
-    external: true
+    external: false
+
+volumes:
+  caddy_data:
+  caddy_config:
