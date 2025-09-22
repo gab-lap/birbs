@@ -350,33 +350,71 @@ def upload_beer(
     db: Session = Depends(get_db),
     current: User = Depends(get_current_user),
 ):
-    safe_name = f"{current.id}_{int(datetime.utcnow().timestamp())}_{photo.filename}"
-    dest_path = os.path.join(MEDIA_ROOT, safe_name)
-
-    # save bytes
-    data = photo.file.read()
-    if not data:
+    # 1) Leggi con limite (8MB)
+    SIZE_LIMIT = 8 * 1024 * 1024  # 8 MB
+    raw = photo.file.read(SIZE_LIMIT + 1)
+    if not raw:
         raise HTTPException(status_code=400, detail="File vuoto")
+    if len(raw) > SIZE_LIMIT:
+        raise HTTPException(status_code=413, detail="File troppo grande (max 8MB)")
 
-    with open(dest_path, "wb") as out:
-        out.write(data)
+    # 2) Apri con Pillow
+    try:
+        img = Image.open(BytesIO(raw))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Immagine non valida")
 
-    size_bytes = os.path.getsize(dest_path)
+    # 3) Ridimensiona (max 1600px lato lungo) e ricomprimi
+    max_edge = 1600
+    w, h = img.size
+    if max(w, h) > max_edge:
+        if w >= h:
+            new_w = max_edge
+            new_h = int(h * (max_edge / w))
+        else:
+            new_h = max_edge
+            new_w = int(w * (max_edge / h))
+        img = img.resize((new_w, new_h), Image.LANCZOS)
 
+    # Converti a RGB per evitare problemi con palette/trasparenze
+    if img.mode not in ("RGB", "RGBA"):
+        img = img.convert("RGB")
+
+    out = BytesIO()
+    mime_ext = "webp"
+    try:
+        # qualità 80 circa
+        img.save(out, format="WEBP", quality=80, method=6)
+    except Exception:
+        # fallback JPEG
+        mime_ext = "jpg"
+        # se RGBA, togli alpha
+        if img.mode == "RGBA":
+            bg = Image.new("RGB", img.size, (255, 255, 255))
+            bg.paste(img, mask=img.split()[3])
+            img = bg
+        img.save(out, format="JPEG", quality=85, optimize=True)
+    out_bytes = out.getvalue()
+
+    # 4) Salva su disco
+    safe_name = f"{current.id}_{int(datetime.utcnow().timestamp())}_upload.{mime_ext}"
+    dest_path = os.path.join(MEDIA_ROOT, safe_name)
+    with open(dest_path, "wb") as f:
+        f.write(out_bytes)
+
+    # 5) Crea riga DB (image_size_bytes)
     beer = Beer(
         user_id=current.id,
         name=(name or "").strip() or None,
         is_manual=False,
         quantity=1,
         image_path=safe_name,
+        image_size_bytes=len(out_bytes),
     )
-    # if you added the column in your model / DB:
-    if hasattr(beer, "image_size_bytes"):
-        beer.image_size_bytes = int(size_bytes)
-
     db.add(beer)
     db.commit()
     db.refresh(beer)
+
     return {"ok": True, "item": beer_to_dict(beer)}
 
 
