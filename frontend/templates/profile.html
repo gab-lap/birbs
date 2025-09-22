@@ -4,7 +4,7 @@
 <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
   <div>
     <h1 class="h4 mb-1">Ciao, {{ profile.username }}</h1>
-    <div class="text-muted small">Iscritto dal: {{ profile.joined_at }}</div>
+    <div class="text-muted small">Iscritto dal: <span class="ts" data-ts="{{ profile.joined_at }}"></span></div>
   </div>
 
   {% if is_owner %}
@@ -140,7 +140,7 @@
                 <span class="badge text-bg-secondary ms-1">x{{ b.quantity }}</span>
               {% endif %}
             </div>
-            <div class="text-muted small">{{ b.timestamp }}</div>
+            <div class="text-muted small"><span class="ts" data-ts="{{ b.timestamp }}"></span></div>
 
             {% if is_owner %}
             <div class="d-flex gap-2 mt-2">

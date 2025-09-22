@@ -4,6 +4,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
+# ---- Timezone Europe/Rome ----
+    RUN apt-get update && apt-get install -y --no-install-recommends tzdata \
+    && rm -rf /var/lib/apt/lists/*
+ENV TZ=Europe/Rome
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+# ------------------------------
+
 WORKDIR /app
 
 # System deps for pymysql are minimal; if switching to mysqlclient you would add build-essential default-libmysqlclient-dev
