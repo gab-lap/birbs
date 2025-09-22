@@ -196,3 +196,79 @@
   // Quando si chiude il modal, reset
   viewerModalEl.addEventListener("hidden.bs.modal", resetTransform);
 })();
+
+// ====== CLIENT-SIDE RESIZE + UPLOAD ======
+(function () {
+  const form = document.getElementById("uploadForm");
+  const fileInput = document.getElementById("photoInput");
+  if (!form || !fileInput) return;
+
+  form.addEventListener("submit", async (e) => {
+    const file = fileInput.files?.[0];
+    if (!file) return; // il required dell'input farà già bloccare
+
+    e.preventDefault(); // invio manuale
+
+    try {
+      const img = await blobToImage(file);
+      const { blob, mime } = await downscaleToMax(img, 1600); // max lato lungo 1600px
+      const fd = new FormData();
+      const nameField = form.querySelector("[name='beer_name']");
+      fd.append("beer_name", nameField ? (nameField.value || "") : "");
+      const ext = mime.includes("webp") ? "webp" : "jpg";
+      const outFile = new File([blob], `upload.${ext}`, { type: mime });
+      fd.append("photo", outFile);
+
+      const resp = await fetch("/upload_beer", { method: "POST", body: fd });
+      if (resp.redirected) window.location.href = resp.url;
+      else window.location.reload();
+    } catch (err) {
+      console.error(err);
+      alert("Riduzione immagine fallita. Riprova con un file più piccolo.");
+    }
+  });
+
+  // Helpers
+  function blobToImage(file) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+      img.onerror = reject;
+      img.src = url;
+    });
+  }
+
+  function downscaleToMax(img, maxEdge = 1600) {
+    const iw = img.naturalWidth, ih = img.naturalHeight;
+    let tw = iw, th = ih;
+    if (Math.max(iw, ih) > maxEdge) {
+      if (iw >= ih) { tw = maxEdge; th = Math.round((ih * maxEdge) / iw); }
+      else { th = maxEdge; tw = Math.round((iw * maxEdge) / ih); }
+    }
+    const c = document.createElement("canvas");
+    c.width = tw; c.height = th;
+    const ctx = c.getContext("2d");
+    ctx.drawImage(img, 0, 0, tw, th);
+
+    // Prova WebP, fallback JPEG
+    let quality = 0.72;
+    let mime = "image/webp";
+    let dataURL = c.toDataURL(mime, quality);
+    if (dataURL.indexOf("data:image/webp") !== 0) {
+      mime = "image/jpeg";
+      dataURL = c.toDataURL(mime, quality);
+    }
+    const blob = dataURLToBlob(dataURL);
+    return Promise.resolve({ blob, mime, width: tw, height: th });
+  }
+
+  function dataURLToBlob(dataURL) {
+    const [meta, b64] = dataURL.split(",");
+    const bin = atob(b64);
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    const mime = meta.match(/data:(.*?);/)[1] || "application/octet-stream";
+    return new Blob([arr], { type: mime });
+  }
+})();

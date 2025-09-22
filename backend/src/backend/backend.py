@@ -12,6 +12,14 @@ from sqlalchemy import (
     create_engine, Column, Integer, String, DateTime, ForeignKey, Boolean, Text, func, and_, or_
 )
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker, Session
+from PIL import Image
+from io import BytesIO
+
+
+MAX_EDGE = 1600           # safety server-side
+JPEG_QUALITY = 72         # if WebP not possible
+WEBP_QUALITY = 70
+ALLOWED = {"image/jpeg", "image/png", "image/webp"}
 
 # --------------------------------------------------------------------------------------
 # Environment
@@ -28,6 +36,7 @@ SESSION_TTL_DAYS = int(os.getenv("SESSION_TTL_DAYS", "7"))
 SECURE_COOKIES = os.getenv("SECURE_COOKIES", "0") in ("1", "true", "True")
 
 os.makedirs(MEDIA_ROOT, exist_ok=True)
+
 
 # --------------------------------------------------------------------------------------
 # Database
@@ -71,10 +80,12 @@ class Beer(Base):
     name = Column(String(120))
     image_path = Column(Text, nullable=True)
     is_manual = Column(Boolean, default=False)
-    quantity = Column(Integer, default=1, nullable=False)  # <-- single row can represent many
+    quantity = Column(Integer, default=1, nullable=False)
     timestamp = Column(DateTime, server_default=func.now())
+    image_size_bytes = Column(Integer, nullable=True)  # <-- NEW
 
     user = relationship("User", back_populates="beers")
+
 
 
 class FriendRequest(Base):
@@ -202,6 +213,7 @@ def beer_to_dict(b: Beer) -> dict:
         "is_manual": bool(b.is_manual),
         "quantity": int(b.quantity or 1),
         "image_url": f"{MEDIA_URL_BASE}/{b.image_path}" if b.image_path else None,
+        "image_size_bytes": b.image_size_bytes,  # <-- NEW
     }
 
 
@@ -338,25 +350,18 @@ def upload_beer(
     db: Session = Depends(get_db),
     current: User = Depends(get_current_user),
 ):
-
-    # Validazioni lato server
-    if photo is None or not photo.filename:
-        raise HTTPException(status_code=400, detail="Foto obbligatoria.")
-    # opzionale: verifica tipo MIME
-    if photo.content_type not in {"image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"}:
-        raise HTTPException(status_code=400, detail="Il file deve essere un'immagine.")
-
-    # opzionale: verifica non vuoto
-    head = photo.file.read(1)
-    if not head:
-        raise HTTPException(status_code=400, detail="File immagine vuoto.")
-    photo.file.seek(0)
-
-    # Save file
     safe_name = f"{current.id}_{int(datetime.utcnow().timestamp())}_{photo.filename}"
     dest_path = os.path.join(MEDIA_ROOT, safe_name)
+
+    # save bytes
+    data = photo.file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="File vuoto")
+
     with open(dest_path, "wb") as out:
-        out.write(photo.file.read())
+        out.write(data)
+
+    size_bytes = os.path.getsize(dest_path)
 
     beer = Beer(
         user_id=current.id,
@@ -365,6 +370,10 @@ def upload_beer(
         quantity=1,
         image_path=safe_name,
     )
+    # if you added the column in your model / DB:
+    if hasattr(beer, "image_size_bytes"):
+        beer.image_size_bytes = int(size_bytes)
+
     db.add(beer)
     db.commit()
     db.refresh(beer)
@@ -525,3 +534,29 @@ def public_user_beers(username: str, db: Session = Depends(get_db), current: Use
         .all()
     )
     return {"items": [beer_to_dict(b) for b in rows]}
+
+
+def backfill_image_sizes(db: Session):
+    missing = (
+        db.query(Beer)
+        .filter(Beer.image_path.isnot(None))
+        .filter((Beer.image_size_bytes.is_(None)) | (Beer.image_size_bytes == 0))
+        .all()
+    )
+    changed = 0
+    for b in missing:
+        p = os.path.join(MEDIA_ROOT, b.image_path)
+        if os.path.isfile(p):
+            try:
+                b.image_size_bytes = os.path.getsize(p)
+                changed += 1
+            except Exception:
+                pass
+    if changed:
+        db.commit()
+
+# call once on startup
+@app.on_event("startup")
+def _backfill_on_start():
+    with SessionLocal() as db:
+        backfill_image_sizes(db)

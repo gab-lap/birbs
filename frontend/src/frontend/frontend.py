@@ -5,7 +5,7 @@ from os import getenv
 from requests import get, post
 from requests.exceptions import RequestException, HTTPError
 
-from fastapi import FastAPI, Request, Form, UploadFile, File
+from fastapi import FastAPI, Request, Form, UploadFile, File, Response
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -227,14 +227,21 @@ async def profile(request: Request, message: str = "", message_type: str = "succ
 async def upload_beer(request: Request, beer_name: str = Form(""), photo: UploadFile = File(...)):
     headers = _build_auth_headers(request)
     if not headers:
-        return RedirectResponse(url="/directlogin?message=Sessione%20scaduta&message_type=danger", status_code=302)
+        return RedirectResponse(url="/directlogin", status_code=302)
 
     try:
-        with photo.file as fp:
-            files = {"photo": (photo.filename, fp, photo.content_type or "image/jpeg")}
-            data = {"name": beer_name}
-            resp = post(f"{BASE_URL}/beers/upload", headers=headers, files=files, data=data)
-            resp.raise_for_status()
+        # read file bytes safely
+        await photo.seek(0)
+        content = await photo.read()
+        if not content:
+            return await profile(request, message="File vuoto o non letto.")
+
+        files = {"photo": (photo.filename or "upload", content, photo.content_type or "application/octet-stream")}
+        data = {"name": beer_name}
+
+        resp = post(f"{BASE_URL}/beers/upload", headers=headers, files=files, data=data)
+        resp.raise_for_status()
+
     except HTTPError as e:
         detail = "Upload fallito."
         if e.response is not None:
@@ -242,13 +249,11 @@ async def upload_beer(request: Request, beer_name: str = Form(""), photo: Upload
                 detail = e.response.json().get("detail", detail)
             except Exception:
                 detail = e.response.text or detail
-        # ritorna errore con message_type rosso
-        return await profile(request, message=detail, message_type="danger")
+        return await profile(request, message=detail)
     except RequestException as e:
-        return await profile(request, message=f"Backend non raggiungibile: {e}", message_type="danger")
+        return await profile(request, message=f"Backend non raggiungibile: {e}")
 
-    # successo: verde
-    return RedirectResponse(url="/profile?message=Upload%20ok&message_type=success", status_code=302)
+    return RedirectResponse(url="/profile?message=Upload%20ok", status_code=302)
 
 
 
@@ -522,10 +527,6 @@ async def user_profile(request: Request, username: str, message: str = "", messa
 
 @app.get("/bmedia/{path:path}")
 def proxy_media(path: str):
-    # Prende i file media dal backend interno (backend-birbs:8001) e li espone su /bmedia
-    upstream = f"{BASE_URL}/media/{path}"
-    r = get(upstream, stream=True)
+    r = get(f"{BASE_URL}/media/{path}")
     r.raise_for_status()
-    # Propaga il Content-Type se noto
-    content_type = r.headers.get("Content-Type", "application/octet-stream")
-    return StreamingResponse(r.raw, media_type=content_type)
+    return Response(content=r.content, media_type=r.headers.get("Content-Type", "application/octet-stream"))
